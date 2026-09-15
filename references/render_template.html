@@ -26,14 +26,33 @@
         appState.viewBackgroundColor = appState.viewBackgroundColor || "#ffffff";
         appState.exportWithDarkMode = false;
 
-        const svg = await exportToSvg({
+        // @excalidraw/utils changed its signature: the current API is
+        //   exportToSvg({ data: { elements, appState, files }, config: { padding } })
+        // while older builds took { elements, appState, files } directly.
+        // Try the current shape first, fall back to the legacy one.
+        const payload = {
           elements: elements,
-          appState: {
-            ...appState,
-            exportBackground: true,
-          },
+          appState: { ...appState, exportBackground: true },
           files: files,
-        });
+        };
+
+        let svg;
+        const looksEmpty = (s) =>
+          !s || !s.childNodes || s.childNodes.length === 0;
+
+        try {
+          svg = await exportToSvg({ data: payload, config: { padding: 16 } });
+        } catch (e1) {
+          svg = null;
+        }
+        if (looksEmpty(svg)) {
+          // Either the current shape threw, or it returned nothing usable --
+          // a silently-empty SVG would otherwise be written out as a blank PNG.
+          svg = await exportToSvg(payload);
+        }
+        if (looksEmpty(svg)) {
+          throw new Error("exportToSvg produced an empty SVG under both call shapes");
+        }
 
         // Clear any previous render
         const root = document.getElementById("root");
